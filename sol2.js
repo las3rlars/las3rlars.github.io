@@ -108,7 +108,7 @@ class Solitaire {
     }
 
     drawFromStock() {
-        if (this.stock.length === 0) {
+        if (this.isEmptyPile(this.stock)) {
             while (this.waste.length) {
 				let card = this.waste.pop();
 				card.faceUp = false;

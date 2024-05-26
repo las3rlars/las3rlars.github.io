@@ -36,22 +36,23 @@
             const textureLoader = new THREE.TextureLoader();
 
             const textureBack = textureLoader.load('textures/back.webp');
-			const textureOutline = textureLoader.load('textures/outline.webp');
+			textureBack.encoding = THREE.sRGBEncoding;
+			const textureOutline = textureLoader.load('textures/place.webp');
+			textureOutline.encoding = THREE.sRGBEncoding;
 			
 			let textures = [];
-			//console.log(game);
 			for (const suit of game.deck.suits) {
-				//console.log(suit);
 				for (const value of game.deck.values) {
 					let id = suit + value;
 					textures[id] = textureLoader.load('textures/'+id+'.webp');
+					textures[id].encoding = THREE.sRGBEncoding;
 				}
 			}
 
             const textureDefault = {
-                width: 176,
+                width: 184,
                 height: 256,
-                halfWidth: 88,
+                halfWidth: 92,
                 halfHeight: 128
             }
             const camera = new THREE.OrthographicCamera( 0.0, window.innerWidth, window.innerHeight, 0, 1, 10 );
@@ -90,7 +91,7 @@
                 let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
                 let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
                 let mesh = new THREE.Mesh(geometry, material);
-				setMeshPos(mesh, offsetX + 20, 20, -1.0);
+				setMeshPos(mesh, offsetX, 20, -1.0);
 				offsetX += 200;
 				mesh.visible = false;
 				scene.add(mesh);
