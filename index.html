@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>test</title>
+		<style>
+			body { margin: 0; }
+		</style>
+    </head>
+    <body>
+        <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+        <script src="sol2.js"></script>
+        <script type="importmap">
+            {
+              "imports": {
+                "three": "https://unpkg.com/three@v0.155.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@v0.155.0/examples/jsm/"
+              }
+            }
+          </script>
+          <script type="module">
+            import * as THREE from 'three';
+
+            const game = new Solitaire();
+			game.drawFromStock();
+
+            
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color( 0x009933 );
+            const textureLoader = new THREE.TextureLoader();
+
+            const textureBack = textureLoader.load('textures/back.webp');
+			const textureOutline = textureLoader.load('textures/outline.webp');
+			
+			let textures = [];
+			//console.log(game);
+			for (const suit of game.deck.suits) {
+				//console.log(suit);
+				for (const value of game.deck.values) {
+					let id = suit + value;
+					textures[id] = textureLoader.load('textures/'+id+'.webp');
+				}
+			}
+
+            const textureDefault = {
+                width: 176,
+                height: 256,
+                halfWidth: 88,
+                halfHeight: 128
+            }
+            const camera = new THREE.OrthographicCamera( 0.0, window.innerWidth, window.innerHeight, 0, 1, 10 );
+            camera.position.z = 1.0;
+
+            let cardMeshes = [];
+			let tableauOutlineMeshes = [];
+			let foundationOutlineMeshes = [];
+			let stockOutlineMesh;
+
+            for (let i = 0; i < 52; ++i) {
+                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
+                let material = new THREE.MeshBasicMaterial({map: textureBack, transparent: true});
+                let mesh = new THREE.Mesh(geometry, material);
+                mesh.position.x = textureDefault.halfWidth;
+                mesh.position.y = textureDefault.halfHeight;
+                scene.add(mesh);
+                cardMeshes.push(mesh);
+            }
+			
+			// tableau outline meshes
+			let offsetX = 0;
+			for (let i = 0; i < 7; ++i) {
+                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
+                let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
+                let mesh = new THREE.Mesh(geometry, material);
+				setMeshPos(mesh, offsetX + 20, 500, -1.0);
+				offsetX += 200;
+				mesh.visible = false;
+				scene.add(mesh);
+				tableauOutlineMeshes.push(mesh);
+			}
+			
+			offsetX = 600;
+			for (let i = 0; i < 4; ++i) {
+                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
+                let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
+                let mesh = new THREE.Mesh(geometry, material);
+				setMeshPos(mesh, offsetX + 20, 20, -1.0);
+				offsetX += 200;
+				mesh.visible = false;
+				scene.add(mesh);
+				foundationOutlineMeshes.push(mesh);			
+			}
+			
+			{
+                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
+                let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
+                let mesh = new THREE.Mesh(geometry, material);
+				setMeshPos(mesh, 20, 20, -1.0);
+				mesh.visible = false;
+				scene.add(mesh);
+				stockOutlineMesh = mesh;
+			}
+
+            function setMeshPos(mesh, x, y, z) {
+                mesh.position.x = textureDefault.halfWidth + x;
+                mesh.position.y = window.innerHeight - (textureDefault.halfHeight + y);
+                mesh.position.z = z;
+            }
+			
+			function isInsideMesh(mesh, x, y) {
+				if (x > mesh.position.x - textureDefault.halfWidth && x < mesh.position.x + textureDefault.halfWidth && y > mesh.position.y - textureDefault.halfHeight && y < mesh.position.y + textureDefault.halfHeight) {
+					return true;
+				}
+				return false;
+			}
+
+			let hand = {
+				source: null,
+				sourceDepth: 0,
+				x: 0,
+				y: 0,
+				offsetX: 0,
+				offsetY: 0,
+				
+				setPos(mesh, event) {
+					hand.x = event.clientX;
+					hand.y = event.clientY;
+					hand.offsetX = (mesh.position.x - textureDefault.halfWidth) - event.clientX;
+					hand.offsetY = -textureDefault.halfHeight;				
+				}
+			};
+
+            function render() {
+                const offset = 3.0;
+                let depth = -0.1;
+                let xOffset = 0.0;
+                let yOffset = 0.0;
+
+				if (hand.source !== null) {
+					for(let i = hand.sourceDepth; i < hand.source.length; ++i) {
+						const card = hand.source[i];
+						setMeshPos(cardMeshes[card.index], hand.x + hand.offsetX, hand.y + hand.offsetY + yOffset, depth);
+						depth += 0.01;
+						yOffset += offset * 6;
+					}
+					renderer.render(scene, camera);
+					requestAnimationFrame(render)
+					return;
+				}
+				// stock
+				{
+					//depth = -1.0;
+					let renderOrder = 0;
+					yOffset = 0.0;
+					let startVisible = game.stock.length > 3 ? game.stock.length - 3 : 0;
+					
+					for (let i = 0; i < startVisible; ++i) {
+						const card = game.stock[i];
+						setMeshPos(cardMeshes[card.index], 20, 20, -1.0);
+					}
+					for (let i = startVisible;  i < game.stock.length; ++i) {
+						const card = game.stock[i];
+						setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 20, 0)
+						cardMeshes[card.index].renderOrder = renderOrder;
+						renderOrder++;
+						cardMeshes[card.index].material.map = textureBack;
+						depth += 0.01;
+						xOffset += offset;
+						yOffset += offset;
+					}
+					
+					stockOutlineMesh.visible = game.isEmptyPile(game.stock);
+				}
+
+                xOffset = 0;
+                yOffset = 0;
+                depth = -1.0;
+                for (const card of game.waste) {
+                    setMeshPos(cardMeshes[card.index], xOffset + 20 + 300, yOffset + 20, depth)
+					if (card.faceUp) {
+						cardMeshes[card.index].material.map = textures[card];
+					}
+					
+                    depth += 0.01;
+                    xOffset += offset;
+                    yOffset += offset;
+                }
+
+
+                xOffset = 0;
+                yOffset = 0;
+                depth = 0;
+				for (let i = 0; i < 7; ++i) {
+					const pile = game.tableau[i];
+                    depth = -1.0;
+                    yOffset = 0;
+                    for (const card of pile) {
+                        setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 500, depth)
+						if (card.faceUp) {
+							cardMeshes[card.index].material.map = textures[card];
+							yOffset += offset * 6;
+						}
+                        yOffset += offset;
+                        depth += 0.01;
+                    }
+					
+					tableauOutlineMeshes[i].visible = game.isEmptyPile(pile);
+                    xOffset += 200;
+                }
+				
+				for (let i = 0; i < 4; ++i) {
+					const pile = game.foundation[i];
+					
+					if (game.isEmptyPile(pile)) {
+						foundationOutlineMeshes[i].visible = true;
+					} else {
+						foundationOutlineMeshes[i].visible = false;
+						setMeshPos(cardMeshes[pile[pile.length - 1].index], 600 + (i * 200), 20, -1.0);
+					}
+				}
+
+                renderer.render(scene, camera);
+                requestAnimationFrame(render)
+                
+            }
+			
+			
+// -------------------------------------				
+			window.addEventListener('mousedown', function (event) {
+				// draw from stock
+				if (!game.isEmptyPile(game.stock)) {
+					if (isInsideMesh(cardMeshes[game.stock[game.stock.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
+						game.drawFromStock();
+						return;
+					}
+				} else {
+					if (isInsideMesh(stockOutlineMesh, event.clientX, window.innerHeight - event.clientY)) {
+						game.drawFromStock();
+						return;
+					}
+				}
+				
+				hand.source = null;
+				
+				for (const pile of game.tableau) {
+					for (let i = 0; i < pile.length; ++i) {
+						const card = pile[i];
+						if(isInsideMesh(cardMeshes[card.index], event.clientX, window.innerHeight - event.clientY)) {
+							if (card.faceUp) {
+								console.log('card: ' + card);
+								hand.source = pile;
+								hand.sourceDepth = i;
+								hand.setPos(cardMeshes[card.index], event);
+							} else if (i === pile.length - 1) {
+								card.faceUp = true;
+								break;
+							}
+						}
+					}
+				}
+				
+				if (!game.isEmptyPile(game.waste)) {
+					if (isInsideMesh(cardMeshes[game.waste[game.waste.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
+						console.log('waste card: ' + game.waste[game.waste.length - 1]);
+						hand.source = game.waste;
+						hand.sourceDepth = game.waste.length - 1;
+						hand.setPos(cardMeshes[game.waste[game.waste.length - 1].index], event);
+						return;
+					}
+				}
+				
+				for (const pile of game.foundation) {
+					if (!game.isEmptyPile(pile)) {
+						if (isInsideMesh(cardMeshes[pile[pile.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
+							hand.source = pile;
+							hand.sourceDepth = pile.length - 1;
+							return;
+						}
+					}
+				}
+				
+			});
+		
+			window.addEventListener('mouseup', function (event) {
+				if (hand.source !== null) {
+					for (let i = 0; i < 7; ++i) {
+						const pile = game.tableau[i];
+						if (pile.length !== 0) {
+							if (isInsideMesh(cardMeshes[pile[pile.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
+								game.moveCards(hand.source, hand.sourceDepth, pile);
+							}
+						} else {
+							if (isInsideMesh(tableauOutlineMeshes[i], event.clientX, window.innerHeight - event.clientY)) {
+								game.moveCards(hand.source, hand.sourceDepth, pile);
+							}
+						}
+					}
+					
+					for (let i = 0; i < 4; ++i) {
+						const pile = game.foundation[i];
+						if (isInsideMesh(foundationOutlineMeshes[i], event.clientX, window.innerHeight - event.clientY)) {
+							if ((hand.source.length - 1) == hand.sourceDepth) {
+								if (game.moveToFoundation(hand.source, pile)) {
+									game.checkForWin();
+								}
+							}							
+						}
+					}
+					hand.source = null;
+				}
+				
+			});
+			
+			window.addEventListener('dblclick', function (event) {
+				console.log('double click!');
+			});
+			
+			window.addEventListener('mousemove', function (event) {
+				if (hand.source !== null) {
+					hand.x = event.clientX;
+					hand.y = event.clientY;
+				}
+			});
+
+            render();
+          </script>
+    </body>
+</html>
