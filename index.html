@@ -24,7 +24,7 @@
             import * as THREE from 'three';
 
             const game = new Solitaire();
-			game.drawFromStock();
+			game.draw3FromStock();
 
             
             const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -79,7 +79,7 @@
                 let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
                 let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
                 let mesh = new THREE.Mesh(geometry, material);
-				setMeshPos(mesh, offsetX + 20, 500, -1.0);
+				setMeshPos(mesh, offsetX + 20, 450, -1.0);
 				offsetX += 200;
 				mesh.visible = false;
 				scene.add(mesh);
@@ -156,7 +156,7 @@
 				}
 				// stock
 				{
-					//depth = -1.0;
+					depth = -1.0;
 					let renderOrder = 0;
 					yOffset = 0.0;
 					let startVisible = game.stock.length > 3 ? game.stock.length - 3 : 0;
@@ -164,12 +164,13 @@
 					for (let i = 0; i < startVisible; ++i) {
 						const card = game.stock[i];
 						setMeshPos(cardMeshes[card.index], 20, 20, -1.0);
+						cardMeshes[card.index].material.map = textureBack;
 					}
 					for (let i = startVisible;  i < game.stock.length; ++i) {
 						const card = game.stock[i];
-						setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 20, 0)
-						cardMeshes[card.index].renderOrder = renderOrder;
-						renderOrder++;
+						setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 20, depth)
+						//cardMeshes[card.index].renderOrder = renderOrder;
+						//renderOrder++;
 						cardMeshes[card.index].material.map = textureBack;
 						depth += 0.01;
 						xOffset += offset;
@@ -183,13 +184,13 @@
                 yOffset = 0;
                 depth = -1.0;
                 for (const card of game.waste) {
-                    setMeshPos(cardMeshes[card.index], xOffset + 20 + 300, yOffset + 20, depth)
+                    setMeshPos(cardMeshes[card.index], xOffset + 20 + 250, yOffset + 20, depth)
 					if (card.faceUp) {
 						cardMeshes[card.index].material.map = textures[card];
 					}
 					
                     depth += 0.01;
-                    xOffset += offset;
+                    xOffset += offset * 4;
                     yOffset += offset;
                 }
 
@@ -202,7 +203,7 @@
                     depth = -1.0;
                     yOffset = 0;
                     for (const card of pile) {
-                        setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 500, depth)
+                        setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 450, depth)
 						if (card.faceUp) {
 							cardMeshes[card.index].material.map = textures[card];
 							yOffset += offset * 6;
@@ -215,6 +216,7 @@
                     xOffset += 200;
                 }
 				
+				depth = -1.0;
 				for (let i = 0; i < 4; ++i) {
 					const pile = game.foundation[i];
 					
@@ -222,7 +224,8 @@
 						foundationOutlineMeshes[i].visible = true;
 					} else {
 						foundationOutlineMeshes[i].visible = false;
-						setMeshPos(cardMeshes[pile[pile.length - 1].index], 600 + (i * 200), 20, -1.0);
+						setMeshPos(cardMeshes[pile[pile.length - 1].index], 600 + (i * 200), 20, depth);
+						depth += 0.01;
 					}
 				}
 
@@ -237,12 +240,12 @@
 				// draw from stock
 				if (!game.isEmptyPile(game.stock)) {
 					if (isInsideMesh(cardMeshes[game.stock[game.stock.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
-						game.drawFromStock();
+						game.draw3FromStock();
 						return;
 					}
 				} else {
 					if (isInsideMesh(stockOutlineMesh, event.clientX, window.innerHeight - event.clientY)) {
-						game.drawFromStock();
+						game.draw3FromStock();
 						return;
 					}
 				}

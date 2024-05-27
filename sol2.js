@@ -107,7 +107,20 @@ class Solitaire {
         return parseInt(card.value);
     }
 
-    drawFromStock() {
+
+	draw3FromStock() {
+		while(this.waste.length) {
+			let card = this.waste.pop();
+			card.faceUp = false;
+			this.stock.unshift(card);			
+		}
+		for (let i = 0; i < 3 && !this.isEmptyPile(this.stock); ++i) {
+			this.waste.push(this.stock.pop());
+			this.waste[this.waste.length - 1].faceUp = true;				
+		}
+	}
+
+    /*drawFromStock() {
         if (this.isEmptyPile(this.stock)) {
             while (this.waste.length) {
 				let card = this.waste.pop();
@@ -118,7 +131,7 @@ class Solitaire {
             this.waste.push(this.stock.pop());
             this.waste[this.waste.length - 1].faceUp = true;
         }
-    }
+    }*/
 
     moveToFoundation(source, target) {
 		const card = source[source.length - 1];
