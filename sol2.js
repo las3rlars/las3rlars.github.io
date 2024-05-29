@@ -1,68 +1,77 @@
 class Card {
-    constructor(suit, value, index) {
-        this.suit = suit;
-        this.value = value;
-        this.faceUp = false;
-        this.index = index;
-    }
+	constructor(suit, value, index) {
+		this.suit = suit;
+		this.value = value;
+		this.faceUp = false;
+		this.index = index;
+	}
 
-    toString() {
-        return this.suit+this.value;
-    }	
+	toString() {
+		return this.suit+this.value;
+	}
 }
 
 class Deck {
-    constructor() {
-        this.cards = [];
-        this.suits = ['s', 'c', 'h', 'd'];
-        this.values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-        let index = 0;
-        for (let suit of this.suits) {
-            for (let value of this.values) {
-                this.cards.push(new Card(suit, value, index++));
-            }
-        }
-        this.shuffle();
-    }
+	constructor() {
+		this.cards = [];
+		this.suits = ['s', 'c', 'h', 'd'];
+		this.values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+		let index = 0;
+		for (let suit of this.suits) {
+			for (let value of this.values) {
+				this.cards.push(new Card(suit, value, index++));
+			}
+		}
+		this.shuffle();
+	}
 
-    shuffle() {
-        for (let i = this.cards.length - 1; i > 0; --i) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
-        }
-    }
+	shuffle() {
+		for (let i = this.cards.length - 1; i > 0; --i) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[this.cards[i], this.cards[j]] = [this.cards[j], this.cards[i]];
+		}
+	}
 
-    deal() {
-        return this.cards.pop();
-    }
+	deal() {
+		return this.cards.pop();
+	}
 }
 
 class Solitaire {
-    constructor() {
-        this.deck = new Deck();
-        this.tableau = [[], [], [], [], [], [], []];
-        this.foundation = [[], [], [], []];
-        this.waste = [];
-        this.stock = [];
+	constructor() {
+		this.deck = new Deck();
+		this.tableau = [[], [], [], [], [], [], []];
+		this.foundation = [[], [], [], []];
+		this.waste = [];
+		this.stock = [];
 
-        this.dealTableau();
-    }
+		this.hand = {
+			source: null,
+			sourceDepth: 0,
+			x: 0,
+			y: 0,
+			offsetX: 0,
+			offsetY: 0,
+		};
 
-    dealTableau() {
-        for (let i = 0; i < 7; ++i) {
-            for (let j = 0; j <= i; ++j) {
-                const card = this.deck.deal();
-                if (j === i) {
-                    card.faceUp = true;
-                }
-                this.tableau[i].push(card);
-            }
-        }
+		this.dealTableau();
+	}
 
-        while (this.deck.cards.length) {
-            this.stock.push(this.deck.deal());
-        }
-    }
+	dealTableau() {
+		for (let i = 0; i < 7; ++i) {
+			for (let j = 0; j <= i; ++j) {
+				const card = this.deck.deal();
+				if (j === i) {
+					card.faceUp = true;
+				}
+				this.tableau[i].push(card);
+			}
+		}
+
+		while (this.deck.cards.length) {
+			this.stock.push(this.deck.deal());
+		}
+	}
 
 	moveCards(source, sourceDepth, target) {
 		if (this.isEmptyPile(source)) {
@@ -72,9 +81,9 @@ class Solitaire {
 
 		const sourceIndex = sourceDepth;
 		const card = source[sourceIndex];
-		
+
 		console.log('moving: ' + card + ' sourceDepth: ' + sourceDepth + ' sourceLength: ' + source.length + ' sourceIndex: ' + sourceIndex);
-		
+
 		if (this.isValidMove(card, target)) {
 			for (let i = sourceIndex; i < source.length; ++i) {
 				target.push(source[i]);
@@ -85,77 +94,76 @@ class Solitaire {
 			return false;
 		}
 	}
-	
-    isValidMove(card, target) {
-        if (this.isEmptyPile(target)) {
-            return card.value === 'K';
-        } else {
-            const targetCard = target[target.length - 1];
-            const targetValue = this.cardValue(targetCard);
-            const cardValue = this.cardValue(card);
-            return targetCard.faceUp &&
-                targetCard.suit !== card.suit &&
-                cardValue === targetValue - 1;
-        }
-    }
 
-    cardValue(card) {
-        if (card.value === 'A') return 1;
-        if (card.value === 'J') return 11;
-        if (card.value === 'Q') return 12;
-        if (card.value === 'K') return 13;
-        return parseInt(card.value);
-    }
+	isValidMove(card, target) {
+		if (this.isEmptyPile(target)) {
+			return card.value === 'K';
+		} else {
+			const targetCard = target[target.length - 1];
+			const targetValue = this.cardValue(targetCard);
+			const cardValue = this.cardValue(card);
+			return targetCard.faceUp &&
+				targetCard.suit !== card.suit &&
+				cardValue === targetValue - 1;
+		}
+	}
 
+	cardValue(card) {
+		if (card.value === 'A') return 1;
+		if (card.value === 'J') return 11;
+		if (card.value === 'Q') return 12;
+		if (card.value === 'K') return 13;
+		return parseInt(card.value);
+	}
 
 	draw3FromStock() {
 		while(this.waste.length) {
 			let card = this.waste.pop();
 			card.faceUp = false;
-			this.stock.unshift(card);			
+			this.stock.unshift(card);
 		}
 		for (let i = 0; i < 3 && !this.isEmptyPile(this.stock); ++i) {
 			this.waste.push(this.stock.pop());
-			this.waste[this.waste.length - 1].faceUp = true;				
+			this.waste[this.waste.length - 1].faceUp = true;
 		}
 	}
 
-    /*drawFromStock() {
-        if (this.isEmptyPile(this.stock)) {
-            while (this.waste.length) {
+	/*drawFromStock() {
+		if (this.isEmptyPile(this.stock)) {
+			while (this.waste.length) {
 				let card = this.waste.pop();
 				card.faceUp = false;
-                this.stock.push(card);
-            }
-        } else {
-            this.waste.push(this.stock.pop());
-            this.waste[this.waste.length - 1].faceUp = true;
-        }
-    }*/
+				this.stock.push(card);
+			}
+		} else {
+			this.waste.push(this.stock.pop());
+			this.waste[this.waste.length - 1].faceUp = true;
+		}
+	}*/
 
-    moveToFoundation(source, target) {
+	moveToFoundation(source, target) {
 		const card = source[source.length - 1];
-        if (this.isValidFoundationMove(card, target)) {
-            target.push(source.pop());
-            return true;
-        }
-        return false;
-    }
+		if (this.isValidFoundationMove(card, target)) {
+			target.push(source.pop());
+			return true;
+		}
+		return false;
+	}
 
-    isValidFoundationMove(card, target) {
-        if (this.isEmptyPile(target)) {
-            return card.value === 'A';
-        } else {
-            const topCard = target[target.length - 1];
-            return topCard.suit === card.suit &&
-                this.cardValue(card) === this.cardValue(topCard) + 1;
-        }
-    }
+	isValidFoundationMove(card, target) {
+		if (this.isEmptyPile(target)) {
+			return card.value === 'A';
+		} else {
+			const topCard = target[target.length - 1];
+			return topCard.suit === card.suit &&
+				this.cardValue(card) === this.cardValue(topCard) + 1;
+		}
+	}
 
-    checkForWin() {
-        return this.foundation.every(pile => pile.length === 13);
-    }
-	
+	checkForWin() {
+		return this.foundation.every(pile => pile.length === 13);
+	}
+
 	isEmptyPile(pile) {
 		return pile.length === 0;
 	}

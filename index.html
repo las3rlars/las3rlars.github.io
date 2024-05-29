@@ -1,266 +1,415 @@
 <!DOCTYPE html>
 
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>test</title>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>test</title>
 		<style>
 			body { margin: 0; }
+			canvas {
+				width: 100%;
+				height: 100%;
+				display: block;
+			}
 		</style>
-    </head>
-    <body>
-        <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-        <script src="sol2.js"></script>
-        <script type="importmap">
-            {
-              "imports": {
-                "three": "https://unpkg.com/three@v0.155.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@v0.155.0/examples/jsm/"
-              }
-            }
-          </script>
-          <script type="module">
-            import * as THREE from 'three';
+	</head>
+	<body>
+		<canvas id="glCanvas"></canvas>
+		<script src="sol2.js"></script>
+		<script type="module">
+		const vertexShaderSource = `
+		attribute vec2 aVertexPosition;
+		attribute vec2 aTextureCoord;
+		varying highp vec2 vTextureCoord;
+		
+		uniform vec2 uResolution;
+		uniform vec2 uPosition;
+		void main(void) {
+			gl_Position = vec4(((aVertexPosition + uPosition) / uResolution) * 2.0 - 1.0, 0.0, 1.0);
+			gl_Position.y = -gl_Position.y;
+			vTextureCoord = aTextureCoord;
+		}
+		`;
 
-            const game = new Solitaire();
-			game.draw3FromStock();
+		const fragmentShaderSource = `
+		varying highp vec2 vTextureCoord;
+		uniform sampler2D uSampler;
+		void main(void) {
+			gl_FragColor = texture2D(uSampler, vTextureCoord);
+		}
+		`;
 
-            
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+		function resizeCanvas(gl, programInfo) {
+			console.log("resize");
+			const canvas = document.getElementById("glCanvas");
+			canvas.width = window.innerWidth
+			canvas.height = window.innerHeight;
+			gl.viewport(0, 0, canvas.width, canvas.height);
+			gl.uniform2f(programInfo.uniformLocations.uResolution, gl.canvas.width, gl.canvas.height);
+		}
 
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color( 0x009933 );
-            const textureLoader = new THREE.TextureLoader();
 
-            const textureBack = textureLoader.load('textures/back.webp');
-			textureBack.encoding = THREE.sRGBEncoding;
-			const textureOutline = textureLoader.load('textures/place.webp');
-			textureOutline.encoding = THREE.sRGBEncoding;
-			
-			let textures = [];
-			for (const suit of game.deck.suits) {
-				for (const value of game.deck.values) {
-					let id = suit + value;
-					textures[id] = textureLoader.load('textures/'+id+'.webp');
-					textures[id].encoding = THREE.sRGBEncoding;
-				}
+		function initWebGL(canvas) {
+			const gl = canvas.getContext("webgl", { alpha: false });
+			if (!gl) {
+				console.error("Unable to initialize WebGL. Your browser may not support it.");
+				return null;
 			}
-
-            const textureDefault = {
-                width: 184,
-                height: 256,
-                halfWidth: 92,
-                halfHeight: 128
-            }
-            const camera = new THREE.OrthographicCamera( 0.0, window.innerWidth, window.innerHeight, 0, 1, 10 );
-            camera.position.z = 1.0;
-
-            let cardMeshes = [];
-			let tableauOutlineMeshes = [];
-			let foundationOutlineMeshes = [];
-			let stockOutlineMesh;
-
-            for (let i = 0; i < 52; ++i) {
-                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
-                let material = new THREE.MeshBasicMaterial({map: textureBack, transparent: true});
-                let mesh = new THREE.Mesh(geometry, material);
-                mesh.position.x = textureDefault.halfWidth;
-                mesh.position.y = textureDefault.halfHeight;
-                scene.add(mesh);
-                cardMeshes.push(mesh);
-            }
-			
-			// tableau outline meshes
-			let offsetX = 0;
-			for (let i = 0; i < 7; ++i) {
-                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
-                let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
-                let mesh = new THREE.Mesh(geometry, material);
-				setMeshPos(mesh, offsetX + 20, 450, -1.0);
-				offsetX += 200;
-				mesh.visible = false;
-				scene.add(mesh);
-				tableauOutlineMeshes.push(mesh);
+			return gl;		
+		}
+		
+		function loadShader(gl, type, source) {
+			const shader = gl.createShader(type);
+			gl.shaderSource(shader, source);
+			gl.compileShader(shader);
+			if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+				console.error("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+				gl.deleteShader(shader);
+				return null;
 			}
-			
-			offsetX = 600;
-			for (let i = 0; i < 4; ++i) {
-                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
-                let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
-                let mesh = new THREE.Mesh(geometry, material);
-				setMeshPos(mesh, offsetX, 20, -1.0);
-				offsetX += 200;
-				mesh.visible = false;
-				scene.add(mesh);
-				foundationOutlineMeshes.push(mesh);			
-			}
-			
-			{
-                let geometry = new THREE.PlaneGeometry(textureDefault.width, textureDefault.height);
-                let material = new THREE.MeshBasicMaterial({map: textureOutline, transparent: true});
-                let mesh = new THREE.Mesh(geometry, material);
-				setMeshPos(mesh, 20, 20, -1.0);
-				mesh.visible = false;
-				scene.add(mesh);
-				stockOutlineMesh = mesh;
-			}
+			return shader;
+		}
 
-            function setMeshPos(mesh, x, y, z) {
-                mesh.position.x = textureDefault.halfWidth + x;
-                mesh.position.y = window.innerHeight - (textureDefault.halfHeight + y);
-                mesh.position.z = z;
-            }
-			
-			function isInsideMesh(mesh, x, y) {
-				if (x > mesh.position.x - textureDefault.halfWidth && x < mesh.position.x + textureDefault.halfWidth && y > mesh.position.y - textureDefault.halfHeight && y < mesh.position.y + textureDefault.halfHeight) {
-					return true;
-				}
-				return false;
-			}
+		function initShaderProgram(gl, vsSource, fsSource) {
+			const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+			const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
 
-			let hand = {
-				source: null,
-				sourceDepth: 0,
-				x: 0,
-				y: 0,
-				offsetX: 0,
-				offsetY: 0,
-				
-				setPos(mesh, event) {
-					hand.x = event.clientX;
-					hand.y = event.clientY;
-					hand.offsetX = (mesh.position.x - textureDefault.halfWidth) - event.clientX;
-					hand.offsetY = -textureDefault.halfHeight;				
-				}
+			const shaderProgram = gl.createProgram();
+			gl.attachShader(shaderProgram, vertexShader);
+			gl.attachShader(shaderProgram, fragmentShader);
+			gl.linkProgram(shaderProgram);
+
+			if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+				console.error("Unable to initialize the shader program: " + gl.getProgramInfoLog(shaderProgram));
+				return null;
+			}
+			return shaderProgram;
+		}
+		
+		function initBuffers(gl) {
+			const width = 184.0;
+			const height = 256.0;
+			const vertices = new Float32Array([
+				0.0,   height, 0.0,  1.0,
+				0.0,   0.0,    0.0,  0.0,
+				width, height, 1.0,  1.0,
+				width, 0.0,    1.0,  0.0,
+			]);
+
+			const positionBuffer = gl.createBuffer();
+			gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+			gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+			return {
+				position: positionBuffer,
+				vertexCount: 4
 			};
+		}		
 
-            function render() {
-                const offset = 3.0;
-                let depth = -0.1;
-                let xOffset = 0.0;
-                let yOffset = 0.0;
+		function loadTexture(gl, url) {
+			const texture = gl.createTexture();
+			gl.bindTexture(gl.TEXTURE_2D, texture);
 
-				if (hand.source !== null) {
-					for(let i = hand.sourceDepth; i < hand.source.length; ++i) {
-						const card = hand.source[i];
-						setMeshPos(cardMeshes[card.index], hand.x + hand.offsetX, hand.y + hand.offsetY + yOffset, depth);
-						depth += 0.01;
+			const level = 0;
+			const internalFormat = gl.RGBA;
+			const width = 1;
+			const height = 1;
+			const border = 0;
+			const srcFormat = gl.RGBA;
+			const srcType = gl.UNSIGNED_BYTE;
+			const pixel = new Uint8Array([0, 0, 255, 255]); // blue color
+			gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType, pixel);
+
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+			const image = new Image();
+			image.onload = () => {
+				gl.bindTexture(gl.TEXTURE_2D, texture);
+				gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);			
+			};
+			image.src = url;
+			return texture;
+		}
+		
+		function loadTexturePromise(gl, url) {
+			return new Promise((resolve, reject) => {
+				const texture = gl.createTexture();
+				gl.bindTexture(gl.TEXTURE_2D, texture);
+
+				const level = 0;
+				const internalFormat = gl.RGBA;
+				const width = 1;
+				const height = 1;
+				const border = 0;
+				const srcFormat = gl.RGBA;
+				const srcType = gl.UNSIGNED_BYTE;
+				const pixel = new Uint8Array([0, 0, 255, 255]); // blue color
+				gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType, pixel);
+
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+				const image = new Image();
+				image.onload = () => {
+					gl.bindTexture(gl.TEXTURE_2D, texture);
+					gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
+
+					/*gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+					gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);*/
+					
+					resolve(texture);
+				};
+				image.src = url;
+			});
+		}
+		
+		function drawScene(gl, programInfo, buffers, textureBack, texturePlace, texturesCard, hitBoxes, game) {
+			gl.clear(gl.COLOR_BUFFER_BIT);
+			gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+			gl.vertexAttribPointer(
+				programInfo.attribLocations.vertexPosition,
+				2, gl.FLOAT, false,
+				4 * Float32Array.BYTES_PER_ELEMENT, 0);
+			gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+			gl.vertexAttribPointer(
+				programInfo.attribLocations.textureCoord,
+				2, gl.FLOAT, false,
+				4 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+			gl.enableVertexAttribArray(programInfo.attribLocations.textureCoord);
+			
+			function drawCard(x, y, texture) {
+				gl.uniform2f(programInfo.uniformLocations.uPosition, x, y);
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, texture);
+				gl.drawArrays(gl.TRIANGLE_STRIP, 0, buffers.vertexCount);
+			}
+			
+			function setHitBox(card, x, y) {
+				hitBoxes[card] = {x, y};
+			}
+			
+			// mark hand cards to not render them in piles
+			let handCards = [];
+			if (game.hand.source !== null) {
+				let yOffset = 0;
+				const hand = game.hand;
+				for(let i = hand.sourceDepth; i < hand.source.length; ++i) {
+					const card = hand.source[i];
+					handCards.push(card.toString());
+				}				
+			}
+		
+			
+			// render tableau
+			const offset = 3.0;
+			let xOffset = 20;
+			for (let i = 0; i < 7; ++i) {
+				const pile = game.tableau[i];
+				let yOffset = 450;
+				for (const card of pile) {
+					if (handCards.includes(card.toString())) continue;
+					drawCard(xOffset, yOffset, card.faceUp ? texturesCard[card] : textureBack);
+					setHitBox(card, xOffset, yOffset);
+					if (card.faceUp) {
 						yOffset += offset * 6;
 					}
-					renderer.render(scene, camera);
-					requestAnimationFrame(render)
-					return;
+					yOffset += offset;
 				}
-				// stock
-				{
-					depth = -1.0;
-					let renderOrder = 0;
-					yOffset = 0.0;
-					let startVisible = game.stock.length > 3 ? game.stock.length - 3 : 0;
-					
-					for (let i = 0; i < startVisible; ++i) {
-						const card = game.stock[i];
-						setMeshPos(cardMeshes[card.index], 20, 20, -1.0);
-						cardMeshes[card.index].material.map = textureBack;
-					}
-					for (let i = startVisible;  i < game.stock.length; ++i) {
-						const card = game.stock[i];
-						setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 20, depth)
-						//cardMeshes[card.index].renderOrder = renderOrder;
-						//renderOrder++;
-						cardMeshes[card.index].material.map = textureBack;
-						depth += 0.01;
-						xOffset += offset;
-						yOffset += offset;
-					}
-					
-					stockOutlineMesh.visible = game.isEmptyPile(game.stock);
-				}
-
-                xOffset = 0;
-                yOffset = 0;
-                depth = -1.0;
-                for (const card of game.waste) {
-                    setMeshPos(cardMeshes[card.index], xOffset + 20 + 250, yOffset + 20, depth)
-					if (card.faceUp) {
-						cardMeshes[card.index].material.map = textures[card];
-					}
-					
-                    depth += 0.01;
-                    xOffset += offset * 4;
-                    yOffset += offset;
-                }
-
-
-                xOffset = 0;
-                yOffset = 0;
-                depth = 0;
-				for (let i = 0; i < 7; ++i) {
-					const pile = game.tableau[i];
-                    depth = -1.0;
-                    yOffset = 0;
-                    for (const card of pile) {
-                        setMeshPos(cardMeshes[card.index], xOffset + 20, yOffset + 450, depth)
-						if (card.faceUp) {
-							cardMeshes[card.index].material.map = textures[card];
-							yOffset += offset * 6;
-						}
-                        yOffset += offset;
-                        depth += 0.01;
-                    }
-					
-					tableauOutlineMeshes[i].visible = game.isEmptyPile(pile);
-                    xOffset += 200;
-                }
 				
-				depth = -1.0;
+				if (game.isEmptyPile(pile)) {
+					drawCard(xOffset, yOffset, texturePlace);
+					setHitBox('tableau'+i, xOffset, yOffset);
+				}
+				xOffset += 200;
+			}
+
+			// render stock
+			{
+				xOffset = 20;
+				let yOffset = 20;
+				let startVisible = game.stock.length > 3 ? game.stock.length - 3 : 0;
+				for (let i = startVisible;  i < game.stock.length; ++i) {
+					const card = game.stock[i];
+					drawCard(xOffset, yOffset, textureBack);
+					setHitBox(card, xOffset, yOffset);
+					xOffset += offset;
+					yOffset += offset;
+				}
+				if (game.isEmptyPile(game.stock)) {
+					drawCard(xOffset, yOffset, texturePlace);
+					setHitBox('stock', xOffset, yOffset);
+				}
+			}
+			
+			// render waste
+			{
+				xOffset = 270; // 20 + 250
+				let yOffset = 20;
+				for (const card of game.waste) {
+					if (handCards.includes(card.toString())) continue;
+					drawCard(xOffset, yOffset, texturesCard[card]);
+					setHitBox(card, xOffset, yOffset);
+					xOffset += offset * 4;
+					yOffset += offset;
+				}
+			}
+			
+			// render foundation
+			{
+				xOffset = 600;
+				let yOffset = 20;
 				for (let i = 0; i < 4; ++i) {
 					const pile = game.foundation[i];
 					
 					if (game.isEmptyPile(pile)) {
-						foundationOutlineMeshes[i].visible = true;
+						drawCard(xOffset, yOffset, texturePlace);
+						setHitBox('foundation'+i, xOffset, yOffset);
 					} else {
-						foundationOutlineMeshes[i].visible = false;
-						setMeshPos(cardMeshes[pile[pile.length - 1].index], 600 + (i * 200), 20, depth);
-						depth += 0.01;
+						const card = pile[pile.length - 1];
+						if (handCards.includes(card.toString())) continue;
+						drawCard(xOffset, yOffset, texturesCard[card]);
+						setHitBox(card, xOffset, yOffset);
 					}
+					xOffset += 200;
 				}
+			}
+			
+			// render hand
+			{
+				if (game.hand.source !== null) {
+					let yOffset = 0;
+					const hand = game.hand;
+					for(let i = hand.sourceDepth; i < hand.source.length; ++i) {
+						const card = hand.source[i];
+						drawCard(hand.x - hand.offsetX, hand.y - hand.offsetY + yOffset, texturesCard[card]);
+						yOffset += offset * 6;
+					}				
+				}
+			}
+		}
+		
+		function main() {
+			const canvas = document.getElementById("glCanvas");
+			const gl = initWebGL(canvas);
+			if (!gl) return;
 
-                renderer.render(scene, camera);
-                requestAnimationFrame(render)
-                
-            }
+			const shaderProgram = initShaderProgram(gl, vertexShaderSource, fragmentShaderSource);
+			const programInfo = {
+				program: shaderProgram,
+				attribLocations: {
+					vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+					textureCoord: gl.getAttribLocation(shaderProgram, 'aTextureCoord'),
+				},
+				uniformLocations: {
+					uSampler: gl.getUniformLocation(shaderProgram, 'uSampler'),
+					uResolution: gl.getUniformLocation(shaderProgram, 'uResolution'),
+					uPosition: gl.getUniformLocation(shaderProgram, 'uPosition'),
+				},
+			};
+
+			gl.useProgram(programInfo.program);
+			gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
+
+			resizeCanvas(gl, programInfo);
 			
+			const game = new Solitaire();
+			game.draw3FromStock();
+
+			const buffers = initBuffers(gl);
+
+			let texturePlace;
+			let textureBack;
 			
-// -------------------------------------				
-			window.addEventListener('mousedown', function (event) {
-				// draw from stock
+			loadTexturePromise(gl, 'textures/place.webp').then(texture => {
+				texturePlace = texture;
+				requestAnimationFrame(render);
+			});
+
+			loadTexturePromise(gl, 'textures/back.webp').then(texture => {
+				textureBack = texture;
+				requestAnimationFrame(render);
+			});
+			
+			let texturesCard = [];
+			
+			for (const suit of game.deck.suits) {
+				for (const value of game.deck.values) {
+					let id = suit + value;
+					loadTexturePromise(gl, 'textures/'+id+'.webp').then(texture => {
+						texturesCard[id] = texture;
+						requestAnimationFrame(render);
+					});
+				}
+			}
+
+
+			gl.clearColor(0.0, 0.6, 0.2, 1.0);
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			gl.disable(gl.DEPTH_TEST);
+			
+			let hitBoxes = [];
+			
+			function render() {
+				drawScene(gl, programInfo, buffers, textureBack, texturePlace, texturesCard, hitBoxes, game);
+			}
+			
+			function isInside(card, x, y) {
+				const box = hitBoxes[card];
+				if (box == null) {
+					return false;
+				}
+				return x > box.x && x < (box.x + 184.0) && y > box.y && y < (box.y + 256.0);
+			}
+			
+			function getClickOffset(card, x, y) {
+				const box = hitBoxes[card];
+				return { x: x - box.x, y: y - box.y };
+			}
+			
+			function setHandPos(card, event) {
+				game.hand.x = event.clientX;
+				game.hand.y = event.clientY;
+				const box = hitBoxes[card];
+				game.hand.offsetX = event.clientX - box.x;
+				game.hand.offsetY = event.clientY - box.y;
+			}
+			
+			function mouseDown(event) {
+				game.hand.source = null;
+				// check stock
 				if (!game.isEmptyPile(game.stock)) {
-					if (isInsideMesh(cardMeshes[game.stock[game.stock.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
+					if (isInside(game.stock[game.stock.length - 1], event.clientX, event.clientY)) {
 						game.draw3FromStock();
 						return;
 					}
 				} else {
-					if (isInsideMesh(stockOutlineMesh, event.clientX, window.innerHeight - event.clientY)) {
+					if (isInside('stock', event.clientX, event.clientY)) {
 						game.draw3FromStock();
 						return;
 					}
 				}
-				
-				hand.source = null;
-				
+
+				// check tableau
 				for (const pile of game.tableau) {
 					for (let i = 0; i < pile.length; ++i) {
 						const card = pile[i];
-						if(isInsideMesh(cardMeshes[card.index], event.clientX, window.innerHeight - event.clientY)) {
+						
+						if(isInside(card, event.clientX, event.clientY)) {
 							if (card.faceUp) {
 								console.log('card: ' + card);
-								hand.source = pile;
-								hand.sourceDepth = i;
-								hand.setPos(cardMeshes[card.index], event);
+								game.hand.source = pile;
+								game.hand.sourceDepth = i;
+								setHandPos(card, event);
 							} else if (i === pile.length - 1) {
 								card.faceUp = true;
 								break;
@@ -269,70 +418,110 @@
 					}
 				}
 				
+				// check waste
 				if (!game.isEmptyPile(game.waste)) {
-					if (isInsideMesh(cardMeshes[game.waste[game.waste.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
-						console.log('waste card: ' + game.waste[game.waste.length - 1]);
-						hand.source = game.waste;
-						hand.sourceDepth = game.waste.length - 1;
-						hand.setPos(cardMeshes[game.waste[game.waste.length - 1].index], event);
+					if (isInside(game.waste[game.waste.length - 1], event.clientX, event.clientY)) {
+						const card = game.waste[game.waste.length - 1];
+						console.log('waste card: ' + card);
+						game.hand.source = game.waste;
+						game.hand.sourceDepth = game.waste.length - 1;
+						setHandPos(card, event);
 						return;
 					}
 				}
-				
+
+				// check foundation
 				for (const pile of game.foundation) {
 					if (!game.isEmptyPile(pile)) {
-						if (isInsideMesh(cardMeshes[pile[pile.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
-							hand.source = pile;
-							hand.sourceDepth = pile.length - 1;
+						if (isInside(pile[pile.length - 1], event.clientX, event.clientY)) {
+							game.hand.source = pile;
+							game.hand.sourceDepth = pile.length - 1;
+							setHandPos(pile[pile.length - 1], event);
 							return;
 						}
 					}
 				}
-				
-			});
-		
-			window.addEventListener('mouseup', function (event) {
-				if (hand.source !== null) {
+			}
+			
+			function mouseUp(event) {
+				if (game.hand.source !== null) {
+					// tableau
 					for (let i = 0; i < 7; ++i) {
 						const pile = game.tableau[i];
-						if (pile.length !== 0) {
-							if (isInsideMesh(cardMeshes[pile[pile.length - 1].index], event.clientX, window.innerHeight - event.clientY)) {
-								game.moveCards(hand.source, hand.sourceDepth, pile);
+						if (!game.isEmptyPile(pile)) {
+							if (isInside(pile[pile.length - 1], event.clientX, event.clientY)) {
+								game.moveCards(game.hand.source, game.hand.sourceDepth, pile);
+								game.hand.source = null;
+								return;
 							}
 						} else {
-							if (isInsideMesh(tableauOutlineMeshes[i], event.clientX, window.innerHeight - event.clientY)) {
-								game.moveCards(hand.source, hand.sourceDepth, pile);
+							if (isInside('tableau'+i, event.clientX, event.clientY)) {
+								game.moveCards(game.hand.source, game.hand.sourceDepth, pile);
+								game.hand.source = null;
+								return;								
 							}
 						}
 					}
 					
+					// foundation
 					for (let i = 0; i < 4; ++i) {
 						const pile = game.foundation[i];
-						if (isInsideMesh(foundationOutlineMeshes[i], event.clientX, window.innerHeight - event.clientY)) {
-							if ((hand.source.length - 1) == hand.sourceDepth) {
-								if (game.moveToFoundation(hand.source, pile)) {
+						if (isInside('foundation'+i, event.clientX, event.clientY)) {
+							if ((game.hand.source.length - 1) == game.hand.sourceDepth) {
+								if (game.moveToFoundation(game.hand.source, pile)) {
 									game.checkForWin();
 								}
-							}							
+							}
 						}
 					}
-					hand.source = null;
-				}
 				
-			});
-			
-			window.addEventListener('dblclick', function (event) {
-				console.log('double click!');
-			});
-			
-			window.addEventListener('mousemove', function (event) {
-				if (hand.source !== null) {
-					hand.x = event.clientX;
-					hand.y = event.clientY;
+					game.hand.source = null;
 				}
-			});
+			}
+			
+			function mouseMove(event) {
+				if (game.hand.source !== null) {
+					game.hand.x = event.clientX;
+					game.hand.y = event.clientY;
+					requestAnimationFrame(render);
+				}
+			}
+			
+			function mouseDblClick(event) {
+				// check tableau
+				for (const pile of game.tableau) {
+					if (!game.isEmptyPile(pile)) {
+						const card = pile[pile.length - 1];
+						if (isInside(card, event.clientX, event.clientY)) {
+							for (const foundation of game.foundation) {
+								if (game.moveToFoundation(pile, foundation)) break;
+							}
+						}
+					}
+				}
+				// check waste
+				if (!game.isEmptyPile(game.waste)) {
+					const card = game.waste[game.waste.length - 1];
+					if (isInside(card, event.clientX, event.clientY)) {
+						for (const foundation of game.foundation) {
+							if (game.moveToFoundation(game.waste, foundation)) break;
+						}
+					}
+				}
+			}
+			
+			
 
-            render();
-          </script>
-    </body>
+			window.addEventListener("resize", (event) => { resizeCanvas(gl, programInfo); requestAnimationFrame(render); });
+			window.addEventListener('mousedown', (event) => { mouseDown(event); requestAnimationFrame(render);});
+			window.addEventListener('mouseup', (event) => { mouseUp(event); requestAnimationFrame(render);});
+			window.addEventListener('mousemove', (event) => { mouseMove(event); });
+			window.addEventListener('dblclick', (event) => { mouseDblClick(event); });
+			requestAnimationFrame(render);
+		}
+		
+		window.onload = main;
+		
+		</script>
+	</body>
 </html>
