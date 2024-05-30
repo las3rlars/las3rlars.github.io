@@ -2,8 +2,8 @@ class Card {
 	constructor(suit, value, index) {
 		this.suit = suit;
 		this.value = value;
+		this.color = (suit === 'h' || suit === 'd') ? 'red' : 'black';
 		this.faceUp = false;
-		this.index = index;
 	}
 
 	toString() {
@@ -103,7 +103,7 @@ class Solitaire {
 			const targetValue = this.cardValue(targetCard);
 			const cardValue = this.cardValue(card);
 			return targetCard.faceUp &&
-				targetCard.suit !== card.suit &&
+				targetCard.color !== card.color &&
 				cardValue === targetValue - 1;
 		}
 	}
